@@ -1,0 +1,15 @@
+{
+  "name": "roblox-chatbot",
+  "version": "1.0.0",
+  "description": "A web-based chatbot for Roblox Studio.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "ws": "^8.18.3"
+  }
+}

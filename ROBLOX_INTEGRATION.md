@@ -1,38 +1,29 @@
 # Roblox Integration Guide
 
-To connect your Roblox Studio plugin to the web-based chatbot, you'll need to use a WebSocket client in your Luau script. Roblox's `HttpService` does not natively support WebSockets, so we'll use a third-party library.
+Exciting news! Roblox Studio now has **official built-in support for WebSockets**, making it easier than ever to connect your plugins to external services. You no longer need a third-party library.
 
-## 1. Get a WebSocket Library
+This guide has been updated to use the new official API.
 
-You'll need to add a WebSocket client library to your Roblox project. A popular and easy-to-use option is the `WebSocket.lua` module. You can find it on GitHub and add it to your plugin's script environment.
+## 1. How to Connect
+
+You will use the `HttpService:CreateWebStreamClient()` function to establish a connection with your deployed web application.
 
 ## 2. Sample Luau Script
 
-Here is a sample Luau script that shows how to connect to the WebSocket server, send messages, and receive messages. You will need to replace `YOUR_VERCEL_APP_URL` with the URL of your deployed Vercel application.
+Here is a sample Luau script demonstrating how to connect to the WebSocket server, send a message, and handle incoming messages using the new API.
+
+You will need to replace `YOUR_VERCEL_APP_URL` with the URL of your deployed Vercel application (e.g., `my-chatbot.vercel.app`).
 
 ```lua
--- Make sure the WebSocket.lua module is in your project and the path is correct
-local WebSocket = require(script.Parent.WebSocket)
+local HttpService = game:GetService("HttpService")
 
 -- Replace with your Vercel app URL (e.g., "your-app-name.vercel.app")
 local YOUR_VERCEL_APP_URL = "your-app-name.vercel.app"
 local url = "wss://" .. YOUR_VERCEL_APP_URL .. "/api/websocket"
 
-local client = WebSocket.new(url)
-
-client.OnConnected:Connect(function()
-    print("Connected to the WebSocket server!")
-
-    -- Send a message to the server
-    local messageData = {
-        sender = "RobloxPlugin",
-        message = "Hello from Roblox Studio!"
-    }
-    client:Send(HttpService:JSONEncode(messageData))
-end)
-
-client.OnMessage:Connect(function(message)
-    print("Received message: " .. message)
+-- Define a function to handle incoming messages
+local function handleMessage(message)
+	print("Received message from server: " .. message)
 
     -- Decode the JSON message
     local success, messageData = pcall(function()
@@ -40,32 +31,50 @@ client.OnMessage:Connect(function(message)
     end)
 
     if success then
-        -- Handle the message data
-        print("Sender: " .. messageData.sender)
-        print("Message: " .. messageData.message)
+        -- Handle the message data from the web UI or other clients
+        print("Sender: " .. tostring(messageData.sender))
+        print("Message: " .. tostring(messageData.message))
     else
         warn("Failed to decode incoming JSON message.")
     end
-end)
+end
 
-client.OnDisconnected:Connect(function(code, reason)
-    print("Disconnected from the WebSocket server. Code: " .. tostring(code) .. ", Reason: " .. tostring(reason))
-end)
+-- Define a function to handle errors
+local function handleError(err)
+    warn("A WebSocket error occurred: " .. tostring(err))
+end
 
-client.OnError:Connect(function(err)
-    warn("An error occurred: " .. tostring(err))
-end)
+-- Create the WebSocket client
+-- The connection attempt begins immediately
+local ws_client = HttpService:CreateWebStreamClient(Enum.WebStreamClientType.WebSocket, {
+	Url = url
+})
 
--- Connect to the server
-client:Connect()
+-- Connect the event handlers
+ws_client.MessageReceived:Connect(handleMessage)
+ws_client.Error:Connect(handleError)
 
--- To send a message from your plugin's UI, you would call:
+print("WebSocket client created. Connection is being established.")
+
+-- To send a message, use the Send() method.
+-- This can be done immediately after creation; the request is queued until connected.
+local messageToSend = {
+    sender = "RobloxPlugin",
+    message = "Hello from the official Roblox WebSocket API!"
+}
+local jsonMessage = HttpService:JSONEncode(messageToSend)
+
+ws_client:Send(jsonMessage)
+print("Initial message sent to the server.")
+
+-- To send a message from your plugin's UI later, you would call:
 -- local messageData = { sender = "RobloxPlugin", message = "Your message here" }
--- client:Send(HttpService:JSONEncode(messageData))
+-- ws_client:Send(HttpService:JSONEncode(messageData))
 ```
 
 ## 3. Important Notes
 
+*   **Studio Only:** This feature is restricted to Roblox Studio. Any `CreateWebStreamClient()` requests made in a live experience will be blocked.
 *   **HttpService:** You must have `HttpService` enabled in your Roblox game settings for this to work.
-*   **WSS Protocol:** Always use `wss://` for the WebSocket URL, as your Vercel application will be served over HTTPS.
-*   **JSON Format:** The web frontend and backend are designed to communicate using JSON messages with `sender` and `message` properties. Make sure your Roblox plugin sends messages in the same format.
+*   **WSS Protocol:** Always use `wss://` for the WebSocket URL, as your Vercel application will be served over HTTPS, which provides a secure connection.
+*   **JSON Format:** The web frontend and backend are designed to communicate using JSON messages with `sender` and `message` properties. Ensure your Roblox plugin sends and expects messages in this format for compatibility.

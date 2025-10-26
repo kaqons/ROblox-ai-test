@@ -76,3 +76,33 @@ That's it! Vercel will build and deploy your application. Once it's finished, yo
 ## Connecting Roblox Studio
 
 After deploying your application, use the live URL to connect your Roblox plugin. Follow the instructions in `ROBLOX_INTEGRATION.md` to set up your Luau script.
+
+## Updating the Application
+
+If you make changes to the code and want to redeploy them, the process is straightforward.
+
+### Automatic Updates (Recommended)
+
+If you deployed by linking your GitHub account to Vercel, any time you `git push` a change to your main branch, Vercel will **automatically trigger a new deployment**.
+
+This is the easiest way to keep your application up-to-date.
+
+1.  **Make your code changes** locally on your computer.
+2.  **Commit and push** the changes to your GitHub repository:
+    ```bash
+    git add .
+    git commit -m "Your update message"
+    git push
+    ```
+3.  **Vercel will handle the rest.** You can monitor the build and deployment progress from your Vercel dashboard.
+
+### Manual Redeployment
+
+If you prefer to redeploy manually, you can use the Vercel CLI.
+
+1.  **Make your code changes** locally.
+2.  **Run the deploy command** from your project's root directory:
+    ```bash
+    vercel --prod
+    ```
+This will upload the latest version of your code and deploy it to the same production URL.

@@ -1,0 +1,566 @@
+-- ===============================================
+-- UI MODULE - Gemini AI Plugin
+-- A clean, modular UI framework for Roblox
+-- ===============================================
+
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService") -- For future JSON/string validation if needed
+
+local UIModule = {}
+
+-- ==================================================================
+-- THEME CONFIGURATION (Exported for external use)
+-- ==================================================================
+
+UIModule.Colors = {
+	Background       = Color3.fromRGB(9, 9, 11),
+	Surface          = Color3.fromRGB(24, 24, 27),
+	SurfaceHover     = Color3.fromRGB(39, 39, 42),
+	SidebarBg        = Color3.fromRGB(15, 15, 18),
+	Border           = Color3.fromRGB(63, 63, 70),
+	Primary          = Color3.fromRGB(139, 92, 246),
+	PrimaryHover     = Color3.fromRGB(167, 139, 250),
+	Secondary        = Color3.fromRGB(244, 114, 182),
+	Accent           = Color3.fromRGB(59, 130, 246),
+	Success          = Color3.fromRGB(74, 222, 128),
+	Warning          = Color3.fromRGB(251, 191, 36),
+	Danger           = Color3.fromRGB(248, 113, 113),
+	Text             = Color3.fromRGB(250, 250, 250),
+	TextSecondary    = Color3.fromRGB(161, 161, 170),
+	TextTertiary     = Color3.fromRGB(113, 113, 122),
+	UserMessage      = Color3.fromRGB(139, 92, 246),
+	BotMessage       = Color3.fromRGB(39, 39, 42),
+	CodeBg           = Color3.fromRGB(20, 20, 23),
+	CodeText         = Color3.fromRGB(150, 200, 255),
+}
+
+UIModule.Sizes = {
+	Window        = Vector2.new(1280, 850),
+	MinWindow     = Vector2.new(900, 650),
+	SidebarWidth  = 280,
+	HeaderHeight  = 65,
+	InputHeight   = 90,
+	MessagePadding = 20,
+}
+
+UIModule.Times = {
+	AnimationSpeed = 0.25,
+	HoverSpeed     = 0.15,
+	FadeInSpeed    = 0.3,
+}
+
+-- ==================================================================
+-- UTILITY FUNCTIONS
+-- Safe object creation, layout helpers, and styling
+-- ==================================================================
+
+--- Creates a Roblox instance with safety checks
+function UIModule.createInstance(className: string, properties: table)
+	local success, instance = pcall(Instance.new, className)
+	if not success or not instance then
+		warn(`[UIModule] Failed to create instance: {className}`)
+		return nil
+	end
+
+	-- Apply properties safely
+	for prop, value in pairs(properties) do
+		if prop ~= "Parent" then
+			local ok = pcall(function()
+				instance[prop] = value
+			end)
+			if not ok then
+				warn(`[UIModule] Failed to set property '{prop}' on {className}`)
+			end
+		end
+	end
+
+	-- Set parent last
+	if properties.Parent then
+		instance.Parent = properties.Parent
+	end
+
+	return instance
+end
+
+--- Adds a UICorner to the given object
+function UIModule.addCorner(parent: Frame, radius: number)
+	return UIModule.createInstance("UICorner", {
+		CornerRadius = UDim.new(0, radius),
+		Parent = parent
+	})
+end
+
+--- Adds UIPadding to the given object
+function UIModule.addPadding(parent: GuiObject, left: number?, right: number?, top: number?, bottom: number?)
+	return UIModule.createInstance("UIPadding", {
+		PaddingLeft   = UDim.new(0, left   or 0),
+		PaddingRight  = UDim.new(0, right  or 0),
+		PaddingTop    = UDim.new(0, top    or 0),
+		PaddingBottom = UDim.new(0, bottom or 0),
+		Parent = parent
+	})
+end
+
+--- Adds UIStroke with optional transparency
+function UIModule.addStroke(parent: GuiObject, color: Color3, thickness: number?, transparency: number?)
+	return UIModule.createInstance("UIStroke", {
+		Color = color,
+		Thickness = thickness or 1,
+		Transparency = transparency or 0,
+		Parent = parent
+	})
+end
+
+-- ==================================================================
+-- ANIMATION SYSTEM
+-- Reusable tweening and hover effects
+-- ==================================================================
+
+--- Creates a tween with customizable easing
+function UIModule.tween(object: Instance, props: table, duration: number?, style: EnumItem?, direction: EnumItem?)
+	local tweenInfo = TweenInfo.new(
+		duration or UIModule.Times.AnimationSpeed,
+		style or Enum.EasingStyle.Quad,
+		direction or Enum.EasingDirection.Out
+	)
+	return TweenService:Create(object, tweenInfo, props)
+end
+
+--- Plays a tween directly
+function UIModule.playTween(object: Instance, props: table, duration: number?, style: EnumItem?, direction: EnumItem?)
+	local tween = UIModule.tween(object, props, duration, style, direction)
+	tween:Play()
+	return tween -- Return for potential chaining or cancellation
+end
+
+--- Applies hover effect with smooth transitions
+function UIModule.addHover(
+	button: TextButton,
+	normalProps: table,
+	hoverProps: table,
+	duration: number?
+)
+	duration = duration or UIModule.Times.HoverSpeed
+
+	local hoverConnection
+	local leaveConnection
+
+	hoverConnection = button.MouseEnter:Connect(function()
+		if not button.Parent then
+			hoverConnection:Disconnect()
+			leaveConnection:Disconnect()
+			return
+		end
+		UIModule.playTween(button, hoverProps, duration)
+	end)
+
+	leaveConnection = button.MouseLeave:Connect(function()
+		if not button.Parent then return end
+		UIModule.playTween(button, normalProps, duration)
+	end)
+
+	-- Cleanup on destroy
+	button.Destroying:Connect(function()
+		if hoverConnection and hoverConnection.Connected then
+			hoverConnection:Disconnect()
+		end
+		if leaveConnection and leaveConnection.Connected then
+			leaveConnection:Disconnect()
+		end
+	end)
+end
+
+-- ==================================================================
+-- COMPONENT BUILDERS (Compact UI Elements)
+-- ==================================================================
+
+function UIModule.createFrame(props: table)
+	return UIModule.createInstance("Frame", props)
+end
+
+function UIModule.createTextButton(props: table)
+	return UIModule.createInstance("TextButton", props)
+end
+
+function UIModule.createTextLabel(props: table)
+	return UIModule.createInstance("TextLabel", props)
+end
+
+function UIModule.createScrollingFrame(props: table)
+	return UIModule.createInstance("ScrollingFrame", props)
+end
+
+function UIModule.createTextBox(props: table)
+	return UIModule.createInstance("TextBox", props)
+end
+
+--- Quick label creation
+function UIModule.mkLabel(
+	parent: GuiObject,
+	text: string,
+	size: UDim2?,
+	pos: UDim2?,
+	textSize: number?,
+	color: Color3?,
+	align: EnumItem?
+)
+	return UIModule.createTextLabel({
+		Size = size or UDim2.new(1, 0, 0, 20),
+		Position = pos or UDim2.new(0, 0, 0, 0),
+		BackgroundTransparency = 1,
+		Text = text,
+		TextColor3 = color or UIModule.Colors.Text,
+		Font = Enum.Font.Gotham,
+		TextSize = textSize or 14,
+		TextXAlignment = align or Enum.TextXAlignment.Left,
+		TextWrapped = true,
+		Parent = parent
+	})
+end
+
+--- Quick button creation with hover and click support
+function UIModule.mkButton(
+	parent: GuiObject,
+	text: string,
+	size: UDim2?,
+	pos: UDim2?,
+	bgColor: Color3?,
+	onClick: (() -> any)?
+)
+	local button = UIModule.createTextButton({
+		Size = size or UDim2.new(1, 0, 0, 36),
+		Position = pos or UDim2.new(0, 0, 0, 0),
+		BackgroundColor3 = bgColor or UIModule.Colors.Surface,
+		Text = text,
+		TextColor3 = UIModule.Colors.Text,
+		Font = Enum.Font.GothamBold,
+		TextSize = 13,
+		AutoButtonColor = false,
+		BorderSizePixel = 0,
+		Parent = parent
+	})
+
+	UIModule.addCorner(button, 8)
+
+	-- Hover effect
+	UIModule.addHover(button, {
+		BackgroundColor3 = bgColor or UIModule.Colors.Surface
+	}, {
+		BackgroundColor3 = UIModule.Colors.SurfaceHover
+	})
+
+	if onClick then
+		button.MouseButton1Click:Connect(onClick)
+	end
+
+	return button
+end
+
+--- Quick frame with corner
+function UIModule.mkFrame(
+	parent: GuiObject,
+	size: UDim2?,
+	pos: UDim2?,
+	color: Color3?
+)
+	local frame = UIModule.createFrame({
+		Size = size or UDim2.new(1, 0, 1, 0),
+		Position = pos or UDim2.new(0, 0, 0, 0),
+		BackgroundColor3 = color or UIModule.Colors.Surface,
+		BorderSizePixel = 0,
+		Parent = parent
+	})
+
+	UIModule.addCorner(frame, 8)
+	return frame
+end
+
+-- ==================================================================
+-- LOADING INDICATORS
+-- Spinner and modal overlay system
+-- ==================================================================
+
+--- Creates a circular spinner animation
+function UIModule.createSpinner(parent: GuiObject, size: number?)
+	size = size or 40
+
+	local spinner = UIModule.createFrame({
+		Size = UDim2.new(0, size, 0, size),
+		Position = UDim2.new(0.5, -size/2, 0.5, -size/2),
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Parent = parent
+	})
+
+	-- Create 8 segments for loading spinner
+	for i = 1, 8 do
+		local segment = UIModule.createFrame({
+			Size = UDim2.new(0, size * 0.15, 0, size * 0.4),
+			Position = UDim2.new(0.5, 0, 0.5, 0),
+			AnchorPoint = Vector2.new(0.5, 0),
+			BackgroundColor3 = UIModule.Colors.Primary,
+			BackgroundTransparency = 0.2 + (i * 0.08), -- Smoother fade
+			BorderSizePixel = 0,
+			Rotation = (i - 1) * 45,
+			Parent = spinner
+		})
+		UIModule.addCorner(segment, UDim.new(1, 0))
+	end
+
+	-- Animation loop
+	local rotationConnection
+	local angle = 0
+
+	local function animate(dt: number)
+		if not spinner or not spinner.Parent then
+			if rotationConnection then rotationConnection:Disconnect() end
+			return
+		end
+		angle = (angle + dt * 180) % 360
+		spinner.Rotation = angle
+	end
+
+	rotationConnection = RunService.RenderStepped:Connect(animate)
+
+	-- Cleanup on removal
+	spinner:GetPropertyChangedSignal("Parent"):Connect(function()
+		if not spinner.Parent and rotationConnection and rotationConnection.Connected then
+			rotationConnection:Disconnect()
+		end
+	end)
+
+	return spinner
+end
+
+--- Shows a semi-transparent loading overlay with message
+function UIModule.showOverlay(parent: GuiObject, message: string?)
+	local overlay = UIModule.createFrame({
+		Size = UDim2.new(1, 0, 1, 0),
+		BackgroundColor3 = UIModule.Colors.Background,
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ZIndex = 999,
+		Parent = parent
+	})
+
+	local container = UIModule.mkFrame(overlay, UDim2.new(0, 240, 0, 160), nil, UIModule.Colors.Surface)
+	container.Position = UDim2.new(0.5, -120, 0.5, -80)
+	container.BackgroundTransparency = 1
+
+	UIModule.addCorner(container, 12)
+	UIModule.addStroke(container, UIModule.Colors.Border, 1, 0.5)
+
+	-- Add spinner
+	local spinner = UIModule.createSpinner(container, 50)
+	spinner.Position = UDim2.new(0.5, -25, 0.5, -60)
+
+	-- Optional message
+	if message then
+		UIModule.mkLabel(container, message, UDim2.new(1, -40, 0, 30), UDim2.new(0, 20, 1, -50), 14, UIModule.Colors.TextSecondary)
+	end
+
+	-- Fade in
+	UIModule.playTween(overlay, { BackgroundTransparency = 0.3 }, UIModule.Times.FadeInSpeed)
+	UIModule.playTween(container, { BackgroundTransparency = 0 }, UIModule.Times.FadeInSpeed)
+
+	return overlay
+end
+
+--- Hides and destroys overlay with fade-out
+function UIModule.hideOverlay(overlay: Frame?)
+	if not overlay or not overlay.Parent then return end
+
+	-- Fade out
+	UIModule.playTween(overlay, { BackgroundTransparency = 1 }, UIModule.Times.AnimationSpeed)
+	task.delay(UIModule.Times.AnimationSpeed + 0.05, function()
+		if overlay and overlay.Parent then
+			overlay:Destroy()
+		end
+	end)
+end
+
+-- ==================================================================
+-- STEPS PROGRESS PANEL (Lemonade-style)
+-- ==================================================================
+
+--- Creates a step-by-step progress tracker
+function UIModule.createStepsPanel(parent: GuiObject, steps: {string})
+	assert(type(steps) == "table" and #steps > 0, "[UIModule.createStepsPanel] 'steps' must be a non-empty array")
+
+	local panel = UIModule.createFrame({
+		Name = "StepsPanel",
+		Size = UDim2.new(1, -40, 0, 0),
+		Position = UDim2.new(0, 20, 0, 10),
+		BackgroundColor3 = UIModule.Colors.Surface,
+		BorderSizePixel = 0,
+		AutomaticSize = Enum.AutomaticSize.Y,
+		Parent = parent
+	})
+
+	UIModule.addCorner(panel, 8)
+	UIModule.addPadding(panel, 16, 16, 12, 12)
+
+	-- Layout
+	UIModule.createInstance("UIListLayout", {
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Padding = UDim.new(0, 8),
+		Parent = panel
+	})
+
+	-- Header
+	local header = UIModule.createFrame({
+		Name = "Header",
+		Size = UDim2.new(1, 0, 0, 24),
+		BackgroundTransparency = 1,
+		LayoutOrder = 1,
+		Parent = panel
+	})
+
+	local headerText = UIModule.mkLabel(header, string.format("Steps (0/%d)", #steps), nil, nil, 14, nil, Enum.TextXAlignment.Left)
+	headerText.Font = Enum.Font.GothamBold
+
+	-- Step containers
+	local stepFrames = {}
+	for i, stepText in ipairs(steps) do
+		local stepFrame = UIModule.createFrame({
+			Name = "Step" .. i,
+			Size = UDim2.new(1, 0, 0, 28),
+			BackgroundTransparency = 1,
+			LayoutOrder = i + 1,
+			Parent = panel
+		})
+
+		UIModule.createInstance("UIListLayout", {
+			FillDirection = Enum.FillDirection.Horizontal,
+			SortOrder = Enum.SortOrder.LayoutOrder,
+			Padding = UDim.new(0, 10),
+			VerticalAlignment = Enum.VerticalAlignment.Center,
+			Parent = stepFrame
+		})
+
+		-- Status Icon (20x20)
+		local icon = UIModule.createFrame({
+			Name = "Icon",
+			Size = UDim2.new(0, 20, 0, 20),
+			BackgroundColor3 = UIModule.Colors.Border,
+			BorderSizePixel = 0,
+			LayoutOrder = 1,
+			Parent = stepFrame
+		})
+		UIModule.addCorner(icon, 4)
+
+		local iconLabel = UIModule.mkLabel(icon, "", UDim2.new(1, 0, 1, 0), nil, 14, Color3.new(1, 1, 1))
+		iconLabel.Font = Enum.Font.GothamBold
+
+		-- Step Label
+		local label = UIModule.mkLabel(stepFrame, stepText, UDim2.new(1, -30, 1, 0), nil, 13, UIModule.Colors.TextSecondary, Enum.TextXAlignment.Left)
+		label.Font = Enum.Font.Gotham
+		label.TextTruncate = Enum.TextTruncate.AtEnd
+
+		stepFrames[i] = {
+			frame = stepFrame,
+			icon = icon,
+			iconLabel = iconLabel,
+			label = label
+		}
+	end
+
+	-- Footer
+	local footer = UIModule.mkLabel(panel, "0 of " .. #steps .. " completed", nil, nil, 12, UIModule.Colors.TextTertiary, Enum.TextXAlignment.Left)
+	footer.LayoutOrder = #steps + 2
+
+	return {
+		panel = panel,
+		headerText = headerText,
+		footer = footer,
+		steps = stepFrames,
+		totalSteps = #steps,
+
+		-- Expose update function as method
+		update = function(self, stepIndex: number, status: string)
+			UIModule.updateStepStatus(self, stepIndex, status)
+		end
+	}
+end
+
+--- Updates the status of a specific step
+function UIModule.updateStepStatus(stepsData, stepIndex: number, status: string)
+	if not stepsData or not stepsData.steps[stepIndex] then return end
+
+	local step = stepsData.steps[stepIndex]
+	local icon = step.icon
+	local iconLabel = step.iconLabel
+	local label = step.label
+
+	local completedCount = 0
+
+	if status == "completed" then
+		iconLabel.Text = "✓"
+		iconLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+		icon:TweenBackgroundColor(UIModule.Colors.Success, 0.2)
+		label.TextColor3 = UIModule.Colors.TextSecondary
+
+	elseif status == "in_progress" then
+		iconLabel.Text = "○"
+		iconLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+		icon:TweenBackgroundColor(UIModule.Colors.Primary, 0.2)
+		label.TextColor3 = UIModule.Colors.Text
+
+		-- Spinner animation
+		task.spawn(function()
+			while icon.BackgroundColor3 == UIModule.Colors.Primary do
+				for _, char in ipairs({"○", "◔", "◑", "◕"}) do
+					if icon.BackgroundColor3 ~= UIModule.Colors.Primary then break end
+					iconLabel.Text = char
+					task.wait(0.15)
+				end
+			end
+		end)
+
+	elseif status == "failed" then
+		iconLabel.Text = "✕"
+		iconLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+		icon:TweenBackgroundColor(UIModule.Colors.Danger, 0.2)
+		label.TextColor3 = UIModule.Colors.Danger
+
+	else -- pending/default
+		iconLabel.Text = ""
+		icon:TweenBackgroundColor(UIModule.Colors.Border, 0.2)
+		label.TextColor3 = UIModule.Colors.TextTertiary
+	end
+
+	-- Recalculate completed steps
+	for _, s in ipairs(stepsData.steps) do
+		if s.icon.BackgroundColor3 == UIModule.Colors.Success then
+			completedCount += 1
+		end
+	end
+
+	stepsData.headerText.Text = string.format("Steps (%d/%d)", completedCount, stepsData.totalSteps)
+	stepsData.footer.Text = string.format("%d of %d completed", completedCount, stepsData.totalSteps)
+end
+
+-- Optional extension: Add TweenBackgroundColor to Frame instances
+if not getmetatable(script) then -- Avoid conflicts
+	table.insert(getgc(true), function()
+		local mt = getmetatable(workspace) -- Hacky way to get a base metatable
+		if mt then
+			local oldIndex = mt.__index
+			mt.__index = function(t, k)
+				if k == "TweenBackgroundColor" and typeof(t) == "Instance" and t:IsA("GuiObject") then
+					return function(self, color, time)
+						UIModule.playTween(self, {BackgroundColor3 = color}, time)
+					end
+				end
+				return oldIndex(t, k)
+			end
+		end
+	end)
+end
+
+-- ==================================================================
+-- EXPORT MODULE
+-- ==================================================================
+
+return UIModule
